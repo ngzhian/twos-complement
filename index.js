@@ -1,3 +1,176 @@
+// Takes a user input, converts it into a 32-bit number.
+// Stores string representation of number in dec, hex, and binary.
+function Number32(value) {
+  const i32arr = new Int32Array(1);
+  const uint8_i32 = new Uint8Array(i32arr.buffer);
+  i32arr[0] = value;
+
+  function toHex(n) {
+    if (n === 0) return '00';
+    return n.toString(16).padStart(2, '0');
+  }
+
+  function toDec(n) {
+    if (n === 0) return '0';
+    return n.toString(10);
+  }
+
+  function toBin(n) {
+    if (n === 0) return '00000000';
+    return n.toString(2).padStart(8, '0');
+  }
+
+  function convert() {
+    decimal.value = toDec(i32arr[0]);
+    hexadecimal.value = "0x" + Array.from(uint8_i32).map(v => toHex(v)).reverse().join('');
+    binary.value = "0b" + Array.from(uint8_i32).map(v => toBin(v)).reverse().join('');
+  }
+
+  convert();
+
+  return {
+    original: value,
+    asi32: i32arr[0],
+    decimal: decimal.value,
+    hexadecimal: hexadecimal.value,
+    binary: binary.value,
+  }
+}
+
+// Interface to update HTML and perform arithmetic.
+function Calculator(id) {
+  const OP_INDEX = 0;
+  const DECICMAL_INDEX = 1;
+  const HEXADECICMAL_INDEX = 2;
+  const BINARY_INDEX = 3;
+  const calc = document.getElementById('calculator');
+
+  function add_new_row() {
+    let new_row = calc.insertRow();
+    // make 4 cells for the 3 representations to show and operation
+    new_row.insertCell();
+    new_row.insertCell();
+    new_row.insertCell();
+    new_row.insertCell();
+  }
+
+  function set_last_row(i32, op) {
+    let last_row = calc.rows[calc.rows.length-1];
+
+    if (typeof(op) !== "undefined") {
+      last_row.cells[OP_INDEX].textContent = op;
+    }
+
+    if (typeof(i32) === "undefined") {
+      // Adding a new row to show operation, no numbers yet.
+      return;
+    }
+
+    last_row.cells[DECICMAL_INDEX].textContent = i32.decimal;
+    last_row.cells[HEXADECICMAL_INDEX].textContent = i32.hexadecimal;
+    last_row.cells[BINARY_INDEX].textContent = i32.binary;
+  }
+
+  function performOperation(op, inputs) {
+    if (inputs.length < 2) {
+      throw 'List wrong size';
+    }
+    let lhs = inputs[inputs.length-2];
+    let rhs = inputs[inputs.length-1];
+    if (op == '+') {
+      return Number32(lhs.asi32 + rhs.asi32);
+    } else if (op == '-') {
+      return Number32(lhs.asi32 - rhs.asi32);
+    } else {
+      throw `Unsupported operation ${op}`;
+    }
+  }
+
+
+  return {
+    add_new_row,
+    set_last_row,
+    performOperation,
+  }
+}
+
+(function() {
+  inputs = [];
+  current = "";
+  current_num = null;
+
+  cc = new Calculator('calculator');
+
+  function performOperation(op, inputs) {
+    if (inputs.length < 2) {
+      throw 'List wrong size';
+    }
+    let lhs = inputs[inputs.length-2];
+    let rhs = inputs[inputs.length-1];
+    if (op == '+') {
+      return Number32(lhs.asi32 + rhs.asi32);
+    } else if (op == '-') {
+      return Number32(lhs.asi32 - rhs.asi32);
+    } else {
+      throw `Unsupported operation ${op}`;
+    }
+  }
+
+  function isSupportedOp(key) { return ['+', '-', '*', '/'].indexOf(key) !== -1; }
+
+  // Driver to decide when to call specific operations of Calculator.
+  function updateCalculator(e) {
+    has_update = false;
+
+    // console.log(e);
+
+    // Allow simple user edits to the current number, in the future maybe allow
+    // use to focus on previously computed result and update it.
+    if (e.code === "Backspace") {
+      current = current.slice(0, current.length-1);
+      has_update = true;
+    } else if (e.code.startsWith("Digit")) {
+      // Add to current input.
+      current += e.key;
+      has_update = true;
+    } else if (isSupportedOp(e.key)) {
+      // Nothing to do.
+      if (current === "") { return; }
+
+      // Performing an operation adds a new row to show the operation, and also the new number.
+      inputs.push(current_num);
+      current = "";
+      current_num = null;
+
+      // Two cases, we have 2 inputs to perform the operation, or it's pending a number.
+      //   1
+      //   2
+      // <hit +>
+      let op = e.key;
+      cc.add_new_row();
+      // possibly need to perform calculation
+      if (inputs.length > 1) {
+        let result = cc.performOperation(op, inputs);
+        inputs.push(result)
+        cc.set_last_row(result, undefined);
+        cc.add_new_row();
+        cc.set_last_row(undefined, op);
+      } else {
+        cc.set_last_row(undefined, op);
+      }
+    }
+
+    if (!has_update) {
+      return;
+    }
+
+    current_num = Number32(current);
+    cc.set_last_row( current_num);
+  }
+
+  document.addEventListener('keydown', updateCalculator);
+})();
+
 (function() {
   const DEBUG = 0;
 
@@ -62,10 +235,11 @@
     bits.forEach((v, i) =>  bits[i].textContent = uint8_i32[i]);
     hex.forEach((v, i) =>  hex[i].textContent = toHex(uint8_i32[i]));
 
+    let n = new Number32(e.target.value);
     // endianess?
-    decimal.value = toDec(i32arr[0]);
-    hexadecimal.value = "0x" + Array.from(uint8_i32).map(v => toHex(v)).reverse().join('');
-    binary.value = "0b" + Array.from(uint8_i32).map(v => toBin(v)).reverse().join('');
+    decimal.value = n.decimal;
+    hexadecimal.value = n.hexadecimal;
+    binary.value = n.binary;
   }
 
   decimal.addEventListener('focusout', update);
