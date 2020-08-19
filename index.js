@@ -37,6 +37,8 @@ function Number32(value) {
   }
 }
 
+// TODO separate entering numbers and performing calculation.
+
 // Interface to update HTML and perform arithmetic.
 function Calculator(id) {
   const OP_INDEX = 0;
@@ -44,15 +46,36 @@ function Calculator(id) {
   const HEXADECICMAL_INDEX = 2;
   const BINARY_INDEX = 3;
   const calc = document.getElementById('calculator');
+  var storedOp = "";
 
-  function add_new_row() {
-    let new_row = calc.insertRow();
+  // The last row of the table always has input text, so you can edit the values.
+
+  function finalize_numbers() {
+    // Calculator will always have 1 initial row.
+    // Insert second last row.
+    let last_row = calc.rows[calc.rows.length-1];
+    let save_row = calc.insertRow(calc.rows.length-1);
+
     // make 4 cells for the 3 representations to show and operation
-    new_row.insertCell();
-    new_row.insertCell();
-    new_row.insertCell();
-    new_row.insertCell();
+    for (let i = 0; i < last_row.cells.length; i++) {
+      let save_cell = save_row.insertCell();
+      let input_cell = last_row.cells[i];
+      if (input_cell.childElementCount === 0) {
+        // tr > td > text
+        save_cell.textContent = input_cell.textContent;
+        input_cell.textContent = "";
+      } else {
+        // tr > td > input > value
+        save_cell.textContent = input_cell.children[0].value;
+        input_cell.children[0].value = "";
+      }
+    }
   }
+
+  /// [1] =>   1  =>    1   =>    1
+  //        + [ ]    + [2]     +  2
+  //                              3
+  //                           + [ ]
 
   function set_last_row(i32, op) {
     let last_row = calc.rows[calc.rows.length-1];
@@ -66,9 +89,9 @@ function Calculator(id) {
       return;
     }
 
-    last_row.cells[DECICMAL_INDEX].textContent = i32.decimal;
-    last_row.cells[HEXADECICMAL_INDEX].textContent = i32.hexadecimal;
-    last_row.cells[BINARY_INDEX].textContent = i32.binary;
+    last_row.cells[DECICMAL_INDEX].children[0].value = i32.decimal;
+    last_row.cells[HEXADECICMAL_INDEX].children[0].value = i32.hexadecimal;
+    last_row.cells[BINARY_INDEX].children[0].value = i32.binary;
   }
 
   function performOperation(op, inputs) {
@@ -77,20 +100,27 @@ function Calculator(id) {
     }
     let lhs = inputs[inputs.length-2];
     let rhs = inputs[inputs.length-1];
-    if (op == '+') {
+    if (storedOp == '+') {
+      console.log(`${lhs.asi32} + ${rhs.asi32}`);
       return Number32(lhs.asi32 + rhs.asi32);
-    } else if (op == '-') {
+    } else if (storedOp == '-') {
+      console.log(`${lhs.asi32} - ${rhs.asi32}`);
       return Number32(lhs.asi32 - rhs.asi32);
     } else {
-      throw `Unsupported operation ${op}`;
+      throw `Unsupported operation ${storedOp}`;
     }
+  }
+
+  function storeOp(op) {
+    storedOp = op;
   }
 
 
   return {
-    add_new_row,
+    finalize_numbers,
     set_last_row,
     performOperation,
+    storeOp,
   }
 }
 
@@ -99,22 +129,7 @@ function Calculator(id) {
   current = "";
   current_num = null;
 
-  cc = new Calculator('calculator');
-
-  function performOperation(op, inputs) {
-    if (inputs.length < 2) {
-      throw 'List wrong size';
-    }
-    let lhs = inputs[inputs.length-2];
-    let rhs = inputs[inputs.length-1];
-    if (op == '+') {
-      return Number32(lhs.asi32 + rhs.asi32);
-    } else if (op == '-') {
-      return Number32(lhs.asi32 - rhs.asi32);
-    } else {
-      throw `Unsupported operation ${op}`;
-    }
-  }
+  calc = new Calculator('calculator');
 
   function isSupportedOp(key) { return ['+', '-', '*', '/'].indexOf(key) !== -1; }
 
@@ -124,18 +139,21 @@ function Calculator(id) {
 
     // console.log(e);
 
+    // TODO support enter and equals keys, which will mean inputs need to only store up to 2 operators
     // Allow simple user edits to the current number, in the future maybe allow
     // use to focus on previously computed result and update it.
     if (e.code === "Backspace") {
-      current = current.slice(0, current.length-1);
-      has_update = true;
+      return;
+      // current = current.slice(0, current.length-1);
+      // has_update = true;
     } else if (e.code.startsWith("Digit")) {
+      return;
       // Add to current input.
-      current += e.key;
-      has_update = true;
+      // current += e.key;
+      // has_update = true;
     } else if (isSupportedOp(e.key)) {
       // Nothing to do.
-      if (current === "") { return; }
+      if (e.target.value === "") { return; }
 
       // Performing an operation adds a new row to show the operation, and also the new number.
       inputs.push(current_num);
@@ -147,16 +165,18 @@ function Calculator(id) {
       //   2
       // <hit +>
       let op = e.key;
-      cc.add_new_row();
+      calc.finalize_numbers();
       // possibly need to perform calculation
       if (inputs.length > 1) {
-        let result = cc.performOperation(op, inputs);
+        let result = calc.performOperation(op, inputs);
+        calc.storeOp(op);
         inputs.push(result)
-        cc.set_last_row(result, undefined);
-        cc.add_new_row();
-        cc.set_last_row(undefined, op);
+        calc.set_last_row(result, undefined);
+        calc.finalize_numbers();
+        calc.set_last_row(undefined, op);
       } else {
-        cc.set_last_row(undefined, op);
+        calc.storeOp(op);
+        calc.set_last_row(undefined, op);
       }
     }
 
@@ -165,10 +185,23 @@ function Calculator(id) {
     }
 
     current_num = Number32(current);
-    cc.set_last_row( current_num);
+    calc.set_last_row(current_num);
   }
 
-  document.addEventListener('keydown', updateCalculator);
+  function updateInputs(e) {
+    let current = e.target.value;
+    current_num = Number32(current);
+    calc.set_last_row(current_num);
+  }
+
+
+  document.getElementById("t1").addEventListener("keydown", updateCalculator);
+  document.getElementById("t2").addEventListener("keydown", updateCalculator);
+  document.getElementById("t3").addEventListener("keydown", updateCalculator);
+
+  document.getElementById("t1").addEventListener("input", updateInputs);
+  document.getElementById("t2").addEventListener("input", updateInputs);
+  document.getElementById("t3").addEventListener("input", updateInputs);
 })();
 
 (function() {
